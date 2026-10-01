@@ -1,0 +1,14 @@
+{
+  "name": "irpf-carteira",
+  "version": "0.1.0",
+  "description": "Protótipo local-first que acompanha a carteira de ações e FIIs ao longo do ano e mostra o que atualizar na declaração do IRPF.",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "node scripts/servidor.js",
+    "test": "node --test \"tests/**/*.test.js\""
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

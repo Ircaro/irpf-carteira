@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carteira IRPF</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f8a5f'/%3E%3Ctext x='16' y='21' font-family='Arial' font-size='14' font-weight='700' fill='white' text-anchor='middle'%3EIR%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="topo">
+    <div class="topo-conteudo">
+      <div class="marca">
+        <span class="logo" aria-hidden="true">IR</span>
+        <div>
+          <h1>Carteira IRPF</h1>
+          <p class="sub">Ano-calendário <span data-ano></span> · declaração <span data-ano-decl></span></p>
+        </div>
+      </div>
+      <div class="acoes-topo">
+        <button class="btn btn-sec" id="btn-exemplo" type="button">Carregar exemplo</button>
+        <button class="btn btn-sec" id="btn-exportar" type="button">Exportar backup</button>
+        <label class="btn btn-sec" for="input-importar">Importar backup</label>
+        <input type="file" id="input-importar" accept="application/json,.json" hidden>
+        <button class="btn btn-perigo" id="btn-limpar" type="button">Limpar</button>
+      </div>
+    </div>
+    <nav class="abas" role="tablist">
+      <button class="aba" role="tab" data-aba="declaracao"><span class="num">1</span>Declaração <span data-ano-ant></span></button>
+      <button class="aba" role="tab" data-aba="movimentos"><span class="num">2</span>Movimentações <span data-ano></span></button>
+      <button class="aba" role="tab" data-aba="carteira"><span class="num">3</span>Carteira e apuração</button>
+      <button class="aba" role="tab" data-aba="relatorio"><span class="num">4</span>O que preencher <span class="contador" id="contador-pendencias" hidden></span></button>
+    </nav>
+  </header>
+
+  <main>
+    <p class="aviso-local">Seus dados ficam só neste navegador. Use "Exportar backup" para guardar uma cópia.</p>
+
+    <section class="painel" id="aba-declaracao" role="tabpanel">
+      <div class="cartao intro">
+        <h2>Bens e Direitos em 31/12/<span data-ano-ant></span></h2>
+        <p>Informe as ações e FIIs como estão na declaração do ano passado: quantidade e o valor da coluna "Situação em 31/12/<span data-ano-ant></span>". No produto final, esta etapa viria da importação do arquivo <code>.DEC</code> ou do PDF da declaração.</p>
+      </div>
+
+      <form id="form-bem" class="cartao form-grid" autocomplete="off">
+        <label>Ticker<input name="ticker" required maxlength="8" placeholder="PETR4"></label>
+        <label>Tipo
+          <select name="tipo">
+            <option value="acao">Ação</option>
+            <option value="fii">FII</option>
+          </select>
+        </label>
+        <label>Nome<input name="nome" placeholder="Petrobras"></label>
+        <label>CNPJ<input name="cnpj" placeholder="00.000.000/0000-00" maxlength="18"></label>
+        <label>Corretora<input name="corretora" placeholder="XP Investimentos"></label>
+        <label>Quantidade<input name="quantidade" type="number" min="1" step="1" required></label>
+        <label>Valor declarado (R$)<input name="custo" type="number" min="0" step="0.01" required></label>
+        <div class="form-acoes"><button class="btn btn-pri" type="submit">Adicionar bem</button></div>
+      </form>
+
+      <div class="cartao">
+        <div id="lista-bens"></div>
+      </div>
+
+      <form id="form-prejuizo" class="cartao form-grid form-prejuizo">
+        <div class="span-todo">
+          <h3>Prejuízo a compensar</h3>
+          <p class="nota">Se a declaração anterior tinha prejuízo acumulado em Renda Variável (dezembro), informe aqui. Sem prejuízo, deixe zero.</p>
+        </div>
+        <label>Ações (operações comuns)<input name="acoes" type="number" min="0" step="0.01"></label>
+        <label>FII<input name="fii" type="number" min="0" step="0.01"></label>
+        <div class="form-acoes"><button class="btn btn-sec" type="submit">Salvar prejuízo</button></div>
+      </form>
+    </section>
+
+    <section class="painel" id="aba-movimentos" role="tabpanel">
+      <div class="cartao intro">
+        <h2>Movimentações de <span data-ano></span></h2>
+        <p>Lance compras, vendas, proventos e eventos conforme acontecem. No produto final, isso também viria do upload das planilhas da Área do Investidor da B3 e das notas de corretagem.</p>
+      </div>
+
+      <form id="form-mov" class="cartao form-grid" autocomplete="off">
+        <label>Data<input name="data" type="date" required></label>
+        <label>Operação
+          <select name="tipo">
+            <optgroup label="Negociação">
+              <option value="compra">Compra</option>
+              <option value="venda">Venda</option>
+            </optgroup>
+            <optgroup label="Proventos">
+              <option value="dividendo">Dividendo</option>
+              <option value="jcp">JCP (valor líquido)</option>
+              <option value="rendimento">Rendimento de FII</option>
+            </optgroup>
+            <optgroup label="Eventos">
+              <option value="bonificacao">Bonificação</option>
+              <option value="desdobramento">Desdobramento</option>
+              <option value="grupamento">Grupamento</option>
+            </optgroup>
+          </select>
+        </label>
+        <label>Ticker<input name="ticker" required maxlength="8" placeholder="PETR4"></label>
+        <label data-campo="quantidade">Quantidade<input name="quantidade" type="number" min="1" step="1"></label>
+        <label data-campo="preco"><span data-rotulo-preco>Preço unitário (R$)</span><input name="preco" type="number" min="0" step="0.01"></label>
+        <label data-campo="taxas">Taxas (R$)<input name="taxas" type="number" min="0" step="0.01" value="0"></label>
+        <label data-campo="valor">Valor recebido (R$)<input name="valor" type="number" min="0" step="0.01"></label>
+        <label data-campo="fator"><span data-rotulo-fator>Fator</span><input name="fator" type="number" min="1" step="any"></label>
+
+        <fieldset id="novo-ativo" class="novo-ativo span-todo" hidden disabled>
+          <legend>Ativo novo: complete o cadastro</legend>
+          <div class="form-grid interno">
+            <label>Tipo
+              <select name="novoTipo">
+                <option value="acao">Ação</option>
+                <option value="fii">FII</option>
+              </select>
+            </label>
+            <label>Nome<input name="novoNome"></label>
+            <label>CNPJ<input name="novoCnpj" placeholder="00.000.000/0000-00" maxlength="18"></label>
+            <label>Corretora<input name="novoCorretora"></label>
+          </div>
+        </fieldset>
+
+        <div class="form-acoes"><button class="btn btn-pri" type="submit">Adicionar lançamento</button></div>
+      </form>
+
+      <div class="cartao">
+        <div id="lista-movimentos"></div>
+      </div>
+    </section>
+
+    <section class="painel" id="aba-carteira" role="tabpanel">
+      <div id="alertas-carteira"></div>
+      <div class="cartao">
+        <h2>Carteira em 31/12/<span data-ano></span></h2>
+        <div id="tabela-carteira"></div>
+      </div>
+      <div class="cartao">
+        <h2>Apuração mensal de renda variável</h2>
+        <p class="nota">Ações: isenção quando o total vendido no mês fica até R$ 20 mil; acima disso, 15% sobre o lucro. FII: 20% sobre o lucro, sem isenção. DARF abaixo de R$ 10 acumula para o mês seguinte.</p>
+        <div id="tabela-apuracao"></div>
+      </div>
+    </section>
+
+    <section class="painel" id="aba-relatorio" role="tabpanel">
+      <div class="relatorio-topo">
+        <div>
+          <h2>O que preencher na declaração <span data-ano-decl></span></h2>
+          <p class="nota">Importe a declaração de <span data-ano-decl-ant></span> no programa da Receita e depois ajuste só o que está listado aqui.</p>
+        </div>
+        <button class="btn btn-sec" id="btn-imprimir" type="button">Imprimir ou salvar PDF</button>
+      </div>
+      <div id="relatorio"></div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/regras.js"></script>
+  <script src="js/calculo.js"></script>
+  <script src="js/exemplo.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
