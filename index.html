@@ -4,7 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Carteira IRPF</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f8a5f'/%3E%3Ctext x='16' y='21' font-family='Arial' font-size='14' font-weight='700' fill='white' text-anchor='middle'%3EIR%3C/text%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23f2c14e'/%3E%3Ctext x='16' y='21' font-family='Arial' font-size='14' font-weight='700' fill='%23171a26' text-anchor='middle'%3EIR%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -27,9 +30,10 @@
     </div>
     <nav class="abas" role="tablist">
       <button class="aba" role="tab" data-aba="declaracao"><span class="num">1</span>Declaração <span data-ano-ant></span></button>
-      <button class="aba" role="tab" data-aba="movimentos"><span class="num">2</span>Movimentações <span data-ano></span></button>
+      <button class="aba" role="tab" data-aba="movimentos"><span class="num">2</span>Movimentações</button>
       <button class="aba" role="tab" data-aba="carteira"><span class="num">3</span>Carteira e apuração</button>
-      <button class="aba" role="tab" data-aba="relatorio"><span class="num">4</span>O que preencher <span class="contador" id="contador-pendencias" hidden></span></button>
+      <button class="aba" role="tab" data-aba="desempenho"><span class="num">4</span>Desempenho</button>
+      <button class="aba" role="tab" data-aba="relatorio"><span class="num">5</span>O que preencher <span class="contador" id="contador-pendencias" hidden></span></button>
     </nav>
   </header>
 
@@ -39,7 +43,7 @@
     <section class="painel" id="aba-declaracao" role="tabpanel">
       <div class="cartao intro">
         <h2>Bens e Direitos em 31/12/<span data-ano-ant></span></h2>
-        <p>Informe as ações e FIIs como estão na declaração do ano passado: quantidade e o valor da coluna "Situação em 31/12/<span data-ano-ant></span>". No produto final, esta etapa viria da importação do arquivo <code>.DEC</code> ou do PDF da declaração.</p>
+        <p>Use esta tela só se você não tiver o histórico completo de compras. Aqui entra a posição de partida, como está na declaração do ano passado: quantidade e valor da coluna "Situação em 31/12/<span data-ano-ant></span>". Se as movimentações já cobrem tudo desde a primeira compra, deixe vazio.</p>
       </div>
 
       <form id="form-bem" class="cartao form-grid" autocomplete="off">
@@ -48,6 +52,7 @@
           <select name="tipo">
             <option value="acao">Ação</option>
             <option value="fii">FII</option>
+            <option value="fiagro">Fiagro</option>
           </select>
         </label>
         <label>Nome<input name="nome" placeholder="Petrobras"></label>
@@ -75,8 +80,8 @@
 
     <section class="painel" id="aba-movimentos" role="tabpanel">
       <div class="cartao intro">
-        <h2>Movimentações de <span data-ano></span></h2>
-        <p>Lance compras, vendas, proventos e eventos conforme acontecem. No produto final, isso também viria do upload das planilhas da Área do Investidor da B3 e das notas de corretagem.</p>
+        <h2>Movimentações</h2>
+        <p>Todo o histórico de compras, vendas, proventos e eventos, de todos os anos. O cálculo percorre tudo para chegar na posição de 31/12 de cada ano e no prejuízo acumulado.</p>
       </div>
 
       <form id="form-mov" class="cartao form-grid" autocomplete="off">
@@ -113,6 +118,7 @@
               <select name="novoTipo">
                 <option value="acao">Ação</option>
                 <option value="fii">FII</option>
+            <option value="fiagro">Fiagro</option>
               </select>
             </label>
             <label>Nome<input name="novoNome"></label>
@@ -125,6 +131,18 @@
       </form>
 
       <div class="cartao">
+        <div class="filtros">
+          <label>Ano<select id="filtro-mov-ano"></select></label>
+          <label>Tipo
+            <select id="filtro-mov-grupo">
+              <option value="todos">Todos</option>
+              <option value="negociacao">Compras e vendas</option>
+              <option value="provento">Proventos</option>
+              <option value="evento">Eventos</option>
+            </select>
+          </label>
+          <span class="muted" id="contagem-mov"></span>
+        </div>
         <div id="lista-movimentos"></div>
       </div>
     </section>
@@ -140,6 +158,10 @@
         <p class="nota">Ações: isenção quando o total vendido no mês fica até R$ 20 mil; acima disso, 15% sobre o lucro. FII: 20% sobre o lucro, sem isenção. DARF abaixo de R$ 10 acumula para o mês seguinte.</p>
         <div id="tabela-apuracao"></div>
       </div>
+    </section>
+
+    <section class="painel" id="aba-desempenho" role="tabpanel">
+      <div id="desempenho"></div>
     </section>
 
     <section class="painel" id="aba-relatorio" role="tabpanel">
@@ -158,6 +180,8 @@
 
   <script src="js/regras.js"></script>
   <script src="js/calculo.js"></script>
+  <script src="js/desempenho.js"></script>
+  <script src="js/graficos.js"></script>
   <script src="js/exemplo.js"></script>
   <script src="js/app.js"></script>
 </body>

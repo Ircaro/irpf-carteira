@@ -28,11 +28,19 @@
           descricao: 'Fundos · Fundos de Investimento Imobiliário (FII)',
           unidade: ['cota', 'cotas'],
           artigo: ' do FII'
+        },
+        fiagro: {
+          rotulo: 'Fiagro',
+          grupo: '07',
+          codigo: '02',
+          descricao: 'Fundos · Fiagro (cadeias produtivas agroindustriais)',
+          unidade: ['cota', 'cotas'],
+          artigo: ' do Fiagro'
         }
       },
       rendimentos: {
         dividendos: { ficha: ISENTOS, codigo: '09', descricao: 'Lucros e dividendos recebidos' },
-        rendimentoFii: { ficha: ISENTOS, codigo: '99', descricao: 'Outros (descrever como "Rendimentos de FII")' },
+        rendimentoFii: { ficha: ISENTOS, codigo: '26', descricao: 'Outros (descrever como "Rendimentos de FII/Fiagro")' },
         bonificacao: { ficha: ISENTOS, codigo: '18', descricao: 'Incorporação de reservas ao capital / Bonificações em ações' },
         lucroAcoesIsento: { ficha: ISENTOS, codigo: '20', descricao: 'Ganhos líquidos em ações com vendas de até R$ 20.000,00 no mês' },
         jcp: { ficha: EXCLUSIVOS, codigo: '10', descricao: 'Juros sobre capital próprio' }
@@ -48,12 +56,20 @@
     WEGE3: { tipo: 'acao', nome: 'WEG', cnpj: '84.429.695/0001-11' },
     TAEE11: { tipo: 'acao', nome: 'Taesa', cnpj: '07.859.971/0001-30' },
     MXRF11: { tipo: 'fii', nome: 'Maxi Renda', cnpj: '97.521.225/0001-25' },
-    HGLG11: { tipo: 'fii', nome: 'CSHG Logística', cnpj: '11.728.688/0001-47' },
+    HGLG11: { tipo: 'fii', nome: 'Pátria Log', cnpj: '11.728.688/0001-47' },
     KNRI11: { tipo: 'fii', nome: 'Kinea Renda Imobiliária', cnpj: '12.005.956/0001-65' }
   };
 
+  function paraAno(ano) {
+    if (REGRAS[ano]) return REGRAS[ano];
+    const anos = Object.keys(REGRAS).map(Number);
+    const proximo = anos.reduce((a, b) => (Math.abs(b - ano) < Math.abs(a - ano) ? b : a));
+    return { ...REGRAS[proximo], anoCalendario: ano, anoDeclaracao: ano + 1, aproximado: true, baseadoEm: proximo };
+  }
+
   const api = {
     porAno: ano => REGRAS[ano],
+    paraAno,
     anosDisponiveis: () => Object.keys(REGRAS).map(Number),
     ATIVOS
   };

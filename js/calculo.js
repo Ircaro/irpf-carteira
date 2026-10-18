@@ -1,6 +1,7 @@
 (function (raiz) {
   const EPS = 1e-9;
-  const ORDEM = { compra: 0, bonificacao: 1, desdobramento: 1, grupamento: 1, venda: 2, dividendo: 3, jcp: 3, rendimento: 3 };
+  const ORDEM = { compra: 0, bonificacao: 1, desdobramento: 1, grupamento: 1, conversao: 1, venda: 2, dividendo: 3, jcp: 3, rendimento: 3 };
+  const ehFundo = tipo => tipo === 'fii' || tipo === 'fiagro';
   const TIPO_PROVENTO = { dividendo: 'dividendos', jcp: 'jcp', rendimento: 'rendimentoFii', bonificacao: 'bonificacao' };
 
   const num2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -25,13 +26,39 @@
       .map(x => x.m);
   }
 
-  function processar(estado, regras) {
-    const ano = String(regras.anoCalendario);
+  function possiveisDayTrades(movimentos) {
+    const compras = new Set(movimentos.filter(m => m.tipo === 'compra').map(m => `${m.ticker}|${m.data}`));
+    const vistos = new Set();
+    return movimentos
+      .filter(m => m.tipo === 'venda' && compras.has(`${m.ticker}|${m.data}`))
+      .filter(m => {
+        const k = `${m.ticker}|${m.data}`;
+        if (vistos.has(k)) return false;
+        vistos.add(k);
+        return true;
+      });
+  }
+
+  function processar(estado, regras, opcoes = {}) {
+    const ano = regras.anoCalendario;
+    const limite = opcoes.ate || `${ano}-12-31`;
+    const inicioAno = `${ano}-01-01`;
     const posicoes = new Map();
     const vendas = [];
     const proventos = [];
     const alertas = [];
     const tipoDe = t => (estado.cadastro[t] && estado.cadastro[t].tipo) || 'acao';
+    let fotografado = false;
+
+    const fotografar = () => {
+      for (const pos of posicoes.values()) {
+        pos.quantidadeInicial = pos.quantidade;
+        pos.custoInicial = pos.custo;
+        pos.quantidadeComprada = 0;
+        pos.movimentado = false;
+      }
+      fotografado = true;
+    };
 
     const garantir = ticker => {
       if (!posicoes.has(ticker)) {
@@ -55,12 +82,21 @@
       pos.custoInicial = pos.custo = arred(Number(p.custo) || 0);
     }
 
+    for (const m of possiveisDayTrades(estado.movimentos)) {
+      alertas.push({
+        nivel: 'aviso',
+        texto: `Compra e venda de ${m.ticker} no mesmo dia (${dataBr(m.data)}): pode ser day trade, que tem regra própria (20%, sem isenção). O cálculo tratou como operação comum.`
+      });
+    }
+
     for (const m of ordenar(estado.movimentos)) {
-      if (!m.data.startsWith(ano)) {
-        alertas.push({ nivel: 'aviso', texto: `Lançamento de ${m.ticker} em ${dataBr(m.data)} está fora de ${ano} e foi ignorado.` });
+      if (m.data > limite) {
+        if (!opcoes.ate) alertas.push({ nivel: 'aviso', texto: `Lançamento de ${m.ticker} em ${dataBr(m.data)} é posterior a ${ano} e ficou fora deste relatório.` });
         continue;
       }
+      if (!fotografado && m.data >= inicioAno) fotografar();
       const pos = garantir(m.ticker);
+      const anoMov = Number(m.data.slice(0, 4));
       pos.movimentado = true;
       const taxas = Number(m.taxas) || 0;
 
@@ -84,8 +120,10 @@
           vendas.push({
             data: m.data,
             mes: m.data.slice(0, 7),
+            ano: anoMov,
             ticker: m.ticker,
             tipo: pos.tipo,
+            origem: m.origem || 'venda',
             quantidade: m.quantidade,
             valorVenda,
             custo: custoVenda,
@@ -104,13 +142,29 @@
           const valor = arred(m.quantidade * m.preco);
           pos.quantidade += m.quantidade;
           pos.custo = arred(pos.custo + valor);
-          proventos.push({ tipo: 'bonificacao', ticker: m.ticker, data: m.data, valor });
+          proventos.push({ tipo: 'bonificacao', ticker: m.ticker, data: m.data, ano: anoMov, valor });
           break;
         }
 
         case 'desdobramento':
-          pos.quantidade = pos.quantidade * m.fator;
+          pos.quantidade = m.fator ? pos.quantidade * m.fator : pos.quantidade + (Number(m.quantidade) || 0);
           break;
+
+        case 'conversao': {
+          const destino = garantir(m.destino);
+          destino.movimentado = true;
+          const q = Math.min(m.quantidade, pos.quantidade);
+          const custoMovido = pos.quantidade > EPS ? arred((pos.custo * q) / pos.quantidade) : 0;
+          pos.quantidade -= q;
+          pos.custo = arred(pos.custo - custoMovido);
+          if (pos.quantidade <= EPS) {
+            pos.quantidade = 0;
+            pos.custo = 0;
+          }
+          destino.quantidade += m.quantidadeDestino;
+          destino.custo = arred(destino.custo + custoMovido);
+          break;
+        }
 
         case 'grupamento': {
           const exata = pos.quantidade / m.fator;
@@ -125,10 +179,12 @@
         }
 
         default:
-          proventos.push({ tipo: m.tipo, ticker: m.ticker, data: m.data, valor: arred(Number(m.valor) || 0) });
+          proventos.push({ tipo: m.tipo, ticker: m.ticker, data: m.data, ano: anoMov, valor: arred(Number(m.valor) || 0) });
       }
+      if (opcoes.aoAplicar) opcoes.aoAplicar(m, posicoes);
     }
 
+    if (!fotografado) fotografar();
     return { posicoes: [...posicoes.values()], vendas, proventos, alertas };
   }
 
@@ -140,13 +196,13 @@
     return { anterior: prejuizo, base: 0, prejuizo: arred(prejuizo - resultado) };
   }
 
-  function apurar(vendas, regras, prejuizoInicial) {
-    const ano = regras.anoCalendario;
+  function apurar(vendas, regras, prejuizoInicial, opcoes = {}) {
+    const ano = opcoes.ano || regras.anoCalendario;
     const meses = [];
     const darfs = [];
     let prejAcoes = arred(Number(prejuizoInicial && prejuizoInicial.acoes) || 0);
     let prejFii = arred(Number(prejuizoInicial && prejuizoInicial.fii) || 0);
-    let pendente = 0;
+    let pendente = arred(Number(opcoes.pendente) || 0);
 
     for (let i = 1; i <= 12; i++) {
       const mes = `${ano}-${String(i).padStart(2, '0')}`;
@@ -154,7 +210,7 @@
       if (!doMes.length) continue;
 
       const acoes = doMes.filter(v => v.tipo === 'acao');
-      const fii = doMes.filter(v => v.tipo === 'fii');
+      const fii = doMes.filter(v => ehFundo(v.tipo));
       const vendasAcoes = arred(soma(acoes, 'valorVenda'));
       const lucroAcoes = arred(soma(acoes, 'lucro'));
       const vendasFii = arred(soma(fii, 'valorVenda'));
@@ -230,7 +286,7 @@
     const unidade = q => (q === 1 ? bem.unidade[0] : bem.unidade[1]);
     const nome = cad.nome ? ` (${cad.nome})` : '';
     const cnpj = cad.cnpj ? `, CNPJ ${cad.cnpj}` : '';
-    const custodia = cad.corretora ? ` Custódia: ${cad.corretora}.` : '';
+    const custodia = cad.corretora ? ` Custódia: ${String(cad.corretora).replace(/[.\s]+$/, '')}.` : '';
     const ativo = `${pos.ticker}${nome}${cnpj}`;
 
     if (status === 'zerado') {
@@ -248,12 +304,19 @@
 
   function compararBens(proc, estado, regras) {
     const grupos = { alterado: [], novo: [], zerado: [], mesmoAno: [], semAlteracao: [] };
-    for (const pos of proc.posicoes) {
+    const declarados = estado.declaradoAnterior || {};
+    const temHistorico = estado.movimentos.some(m => m.data < `${regras.anoCalendario}-01-01`);
+    for (const calculada of proc.posicoes) {
+      const decl = declarados[calculada.ticker];
+      const pos = decl ? { ...calculada, quantidadeInicial: Number(decl.quantidade) || 0, custoInicial: Number(decl.custo) || 0 } : calculada;
       const status = classificar(pos);
       if (!status) continue;
       const cad = estado.cadastro[pos.ticker] || {};
       const bem = regras.bens[pos.tipo];
       grupos[status].push({
+        anteriorInformado: !!decl,
+        anteriorCalculado: temHistorico && !decl,
+        calculadoAnterior: { quantidade: calculada.quantidadeInicial, custo: arred(calculada.custoInicial) },
         ticker: pos.ticker,
         tipo: pos.tipo,
         nome: cad.nome || '',
@@ -343,16 +406,46 @@
     return alertas;
   }
 
-  function gerarRelatorio(estado, regras) {
-    const proc = processar(estado, regras);
-    const apuracao = apurar(proc.vendas, regras, estado.prejuizoInicial);
-    const bens = compararBens(proc, estado, regras);
-    const rendimentos = agruparRendimentos(proc, apuracao, estado, regras);
-    const alertas = [...proc.alertas, ...alertasExtras(proc, bens, estado, regras)];
-    return { posicoes: proc.posicoes, vendas: proc.vendas, proventos: proc.proventos, apuracao, bens, rendimentos, alertas };
+  function apurarHistorico(vendas, regrasPara, prejuizoInicial, ateAno) {
+    const anos = [...new Set(vendas.map(v => v.ano))].filter(a => a <= ateAno).sort((a, b) => a - b);
+    let prejuizo = { acoes: Number(prejuizoInicial && prejuizoInicial.acoes) || 0, fii: Number(prejuizoInicial && prejuizoInicial.fii) || 0 };
+    let pendente = 0;
+    const porAno = [];
+    for (const a of anos) {
+      const regrasAno = regrasPara(a);
+      const r = apurar(vendas.filter(v => v.ano === a), regrasAno, prejuizo, { ano: a, pendente });
+      porAno.push({ ano: a, aproximado: !!regrasAno.aproximado, ...r });
+      prejuizo = r.prejuizoFinal;
+      pendente = r.pendente;
+    }
+    return { porAno, prejuizoFinal: prejuizo, pendente };
   }
 
-  const api = { arred, reais, quantidade, dataBr, ultimoDiaUtil, processar, apurar, compararBens, agruparRendimentos, gerarRelatorio };
+  function gerarRelatorio(estado, regras, regrasPara = () => regras) {
+    const ano = regras.anoCalendario;
+    const proc = processar(estado, regras);
+    const anteriores = apurarHistorico(proc.vendas, regrasPara, estado.prejuizoInicial, ano - 1);
+    const doAno = {
+      ...proc,
+      vendas: proc.vendas.filter(v => v.ano === ano),
+      proventos: proc.proventos.filter(p => p.ano === ano)
+    };
+    const apuracao = apurar(doAno.vendas, regras, anteriores.prejuizoFinal, { pendente: anteriores.pendente });
+    apuracao.prejuizoAnterior = anteriores.prejuizoFinal;
+    apuracao.anosAnteriores = anteriores.porAno;
+    const bens = compararBens(proc, estado, regras);
+    const rendimentos = agruparRendimentos(doAno, apuracao, estado, regras);
+    const alertas = [...proc.alertas, ...alertasExtras(doAno, bens, estado, regras)];
+    if (anteriores.porAno.some(a => a.aproximado)) {
+      alertas.push({
+        nivel: 'aviso',
+        texto: `Os anos anteriores foram apurados com as regras de ${ano}. Para ações e FIIs elas não mudaram nos últimos anos, mas vale conferir.`
+      });
+    }
+    return { posicoes: proc.posicoes, vendas: doAno.vendas, proventos: doAno.proventos, apuracao, bens, rendimentos, alertas };
+  }
+
+  const api = { arred, reais, quantidade, dataBr, ultimoDiaUtil, ordenar, processar, apurar, apurarHistorico, compararBens, agruparRendimentos, gerarRelatorio };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else raiz.Calculo = api;

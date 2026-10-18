@@ -4,8 +4,16 @@
     const mov = dados => ({ id: `ex-${++seq}`, taxas: 0, ...dados });
 
     return {
-      versao: 1,
+      versao: 2,
       anoCalendario: 2026,
+      cotacoes: {
+        PETR4: { preco: 37.2, data: '2026-10-16' },
+        ITSA4: { preco: 10.9, data: '2026-10-16' },
+        MXRF11: { preco: 9.62, data: '2026-10-16' },
+        KNRI11: { preco: 152.3, data: '2026-10-16' },
+        HGLG11: { preco: 158.9, data: '2026-10-16' },
+        WEGE3: { preco: 47.8, data: '2026-10-16' }
+      },
       prejuizoInicial: { acoes: 0, fii: 0 },
       cadastro: {
         PETR4: { tipo: 'acao', nome: 'Petrobras', cnpj: '33.000.167/0001-01', corretora: 'XP Investimentos' },
@@ -15,7 +23,7 @@
         WEGE3: { tipo: 'acao', nome: 'WEG', cnpj: '84.429.695/0001-11', corretora: 'XP Investimentos' },
         MXRF11: { tipo: 'fii', nome: 'Maxi Renda', cnpj: '97.521.225/0001-25', corretora: 'NuInvest' },
         KNRI11: { tipo: 'fii', nome: 'Kinea Renda Imobiliária', cnpj: '12.005.956/0001-65', corretora: 'NuInvest' },
-        HGLG11: { tipo: 'fii', nome: 'CSHG Logística', cnpj: '11.728.688/0001-47', corretora: 'NuInvest' }
+        HGLG11: { tipo: 'fii', nome: 'Pátria Log', cnpj: '11.728.688/0001-47', corretora: 'NuInvest' }
       },
       posicaoInicial: [
         { ticker: 'PETR4', quantidade: 100, custo: 3200 },

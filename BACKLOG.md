@@ -34,7 +34,10 @@ Hoje os dados ficam no `localStorage` de cada navegador. Trocar de navegador, de
 
 - [ ] Importar o arquivo `.DEC` da declaração anterior.
 - [ ] Importar o PDF da declaração anterior.
-- [ ] Importar as planilhas da Área do Investidor da B3 (negociação, movimentação e posição).
+- [x] Importar o extrato de movimentação da B3 por script (`scripts/importar-b3.js`).
+- [ ] Importar os extratos da B3 direto pela tela, sem rodar script.
+- [ ] Validar o importador com o extrato de negociação e o arquivo de posição reais.
+- [ ] Descobrir se direitos de subscrição cedidos ("Cessão de Direitos") foram vendidos por dinheiro.
 - [ ] Importar notas de corretagem em PDF (padrão SINACOR).
 - [ ] Importar informes de rendimentos das corretoras e bancos.
 
@@ -43,7 +46,7 @@ Hoje os dados ficam no `localStorage` de cada navegador. Trocar de navegador, de
 - [ ] Feriados nacionais no cálculo do vencimento do DARF.
 - [ ] IRRF de 0,005% ("dedo-duro") abatendo do imposto devido.
 - [ ] Regras por ano-calendário para 2027 em diante em `js/regras.js`.
-- [ ] Confirmar no programa do IRPF os códigos usados (especialmente rendimento de FII, hoje código 99).
+- [ ] Confirmar no programa do IRPF os códigos usados (rendimento de FII/Fiagro no código 26 e Fiagro em Bens e Direitos 07.02: as fontes divergem).
 - [ ] Tratar a tributação de dividendos acima de R$ 50 mil por mês por empresa, além do alerta atual.
 
 ## Produto e interface
@@ -52,5 +55,8 @@ Hoje os dados ficam no `localStorage` de cada navegador. Trocar de navegador, de
 - [ ] Gerar DARF ou link para o Sicalc a partir da apuração.
 - [ ] Exportar o relatório final em PDF com layout próprio.
 - [ ] Busca automática de nome e CNPJ do ativo (dados abertos da CVM).
-- [ ] Cotação atual para mostrar valor de mercado (só informativo, a declaração usa o custo).
+- [x] Aba de desempenho com cotação digitada à mão.
+- [ ] Buscar cotações automaticamente (precisa de uma API com CORS liberado).
+- [ ] Gráfico do valor de mercado ao longo do tempo (precisa de cotações históricas, ex.: COTAHIST da B3).
+- [ ] Permitir sobrescrever o valor declarado em 31/12 quando ele divergir do calculado.
 - [ ] Versão instalável no celular (PWA).

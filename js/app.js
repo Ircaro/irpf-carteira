@@ -23,7 +23,8 @@
     rendimento: ['Rendimento FII', 'provento'],
     bonificacao: ['Bonificação', 'evento'],
     desdobramento: ['Desdobramento', 'evento'],
-    grupamento: ['Grupamento', 'evento']
+    grupamento: ['Grupamento', 'evento'],
+    conversao: ['Conversão', 'evento']
   };
 
   const ROTULO_STATUS = {
@@ -52,7 +53,7 @@
     String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
-  const vazio = () => ({ versao: 1, anoCalendario: ANO, prejuizoInicial: { acoes: 0, fii: 0 }, cadastro: {}, posicaoInicial: [], movimentos: [] });
+  const vazio = () => ({ versao: 2, anoCalendario: ANO, prejuizoInicial: { acoes: 0, fii: 0 }, cadastro: {}, posicaoInicial: [], movimentos: [], cotacoes: {} });
 
   function ler(chave) {
     try {
@@ -79,7 +80,14 @@
 
   function normalizar(dados) {
     if (!dados || !Array.isArray(dados.posicaoInicial) || !Array.isArray(dados.movimentos)) throw new Error('Arquivo inválido');
-    return { ...vazio(), ...dados, cadastro: dados.cadastro || {}, prejuizoInicial: { acoes: 0, fii: 0, ...(dados.prejuizoInicial || {}) } };
+    return {
+      ...vazio(),
+      ...dados,
+      versao: 2,
+      cadastro: dados.cadastro || {},
+      cotacoes: dados.cotacoes || {},
+      prejuizoInicial: { acoes: 0, fii: 0, ...(dados.prejuizoInicial || {}) }
+    };
   }
 
   let estado = carregar() || vazio();
@@ -128,6 +136,7 @@
     $$('.aba').forEach(a => a.classList.toggle('ativa', a.dataset.aba === nome));
     $$('.painel').forEach(p => p.classList.toggle('ativo', p.id === `aba-${nome}`));
     gravar(CHAVE_ABA, nome);
+    if (nome === 'desempenho') renderDesempenho();
   }
 
   function tabela(cabecalho, linhas, rodape) {
@@ -171,16 +180,35 @@
     fp.fii.value = estado.prejuizoInicial.fii || '';
   }
 
+  const GRUPO_MOV = { compra: 'negociacao', venda: 'negociacao', dividendo: 'provento', jcp: 'provento', rendimento: 'provento' };
+  const filtroMov = { ano: String(ANO), grupo: 'todos' };
+
+  function renderFiltroMov() {
+    const anos = [...new Set(estado.movimentos.map(m => m.data.slice(0, 4)))].sort().reverse();
+    if (!anos.includes(filtroMov.ano) && filtroMov.ano !== 'todos') filtroMov.ano = anos[0] || String(ANO);
+    const sel = $('#filtro-mov-ano');
+    sel.innerHTML = ['todos', ...anos].map(a => `<option value="${a}">${a === 'todos' ? 'Todos os anos' : a}</option>`).join('');
+    sel.value = filtroMov.ano;
+    $('#filtro-mov-grupo').value = filtroMov.grupo;
+  }
+
   function renderMovimentos() {
-    const lista = [...estado.movimentos].sort((a, b) => b.data.localeCompare(a.data));
+    renderFiltroMov();
+    const lista = [...estado.movimentos]
+      .filter(m => filtroMov.ano === 'todos' || m.data.startsWith(filtroMov.ano))
+      .filter(m => filtroMov.grupo === 'todos' || (GRUPO_MOV[m.tipo] || 'evento') === filtroMov.grupo)
+      .sort((a, b) => b.data.localeCompare(a.data));
+    $('#contagem-mov').textContent = `${lista.length} de ${estado.movimentos.length} lançamentos`;
     if (!lista.length) {
-      $('#lista-movimentos').innerHTML = blocoVazio('Nenhum lançamento', 'Use o formulário acima para lançar compras, vendas e proventos do ano.');
+      $('#lista-movimentos').innerHTML = blocoVazio('Nenhum lançamento', estado.movimentos.length ? 'Nenhum lançamento com esse filtro.' : 'Use o formulário acima para lançar compras, vendas e proventos.');
       return;
     }
     const detalhe = m => {
+      if (m.origem === 'leilaoFracao') return `fração de ${qtd(m.quantidade)} vendida pela empresa`;
       if (m.tipo === 'compra' || m.tipo === 'venda') return `${qtd(m.quantidade)} × ${moeda(m.preco)}${m.taxas ? ` <span class="muted">+ taxas ${moeda(m.taxas)}</span>` : ''}`;
       if (m.tipo === 'bonificacao') return `${qtd(m.quantidade)} novas × ${moeda(m.preco)} (custo atribuído)`;
-      if (m.tipo === 'desdobramento') return `1 vira ${qtd(m.fator)}`;
+      if (m.tipo === 'desdobramento') return m.fator ? `1 vira ${qtd(m.fator)}` : `+${qtd(m.quantidade)} novas`;
+      if (m.tipo === 'conversao') return `${qtd(m.quantidade)} viraram ${qtd(m.quantidadeDestino)} ${esc(m.destino)}`;
       if (m.tipo === 'grupamento') return `${qtd(m.fator)} viram 1`;
       return '';
     };
@@ -192,7 +220,7 @@
       return null;
     };
     const linhas = lista.map(m => {
-      const [rotulo, classe] = ROTULO_MOV[m.tipo];
+      const [rotulo, classe] = m.origem === 'leilaoFracao' ? ['Leilão de fração', 'evento'] : m.origem === 'subscricao' ? ['Subscrição', 'compra'] : ROTULO_MOV[m.tipo];
       const t = total(m);
       return `<tr>
         <td>${dataBr(m.data)}</td>
@@ -316,12 +344,17 @@
       );
     }
 
+    const avisoAnterior = b.anteriorCalculado && (b.status === 'alterado' || b.status === 'zerado')
+      ? `<p class="nota">O valor de 31/12/${anoAnt} (${qtd(b.quantidadeInicial)} por ${moeda(b.valorAnterior)}) foi calculado pelo histórico. Se na sua declaração de ${anoAnt + 1} estiver diferente, vale o da declaração.</p>`
+      : '';
+
     return `<article class="bem bem-${b.status}">
       <header>
         <div><strong class="ticker">${esc(b.ticker)}</strong><span class="nome">${esc(b.nome)}</span></div>
         <span class="selo selo-${b.status}">${ROTULO_STATUS[b.status]}</span>
       </header>
       <p class="instrucao">${instrucoes[b.status]}</p>
+      ${avisoAnterior}
       <div class="campos">${campos.join('')}</div>
       <div class="discriminacao">
         <div class="campo">
@@ -379,6 +412,10 @@
       );
 
     let html = '<p class="nota">Preencha só os meses listados, na coluna do mês correspondente. O programa calcula o restante; confira se o imposto devido bate.</p>';
+    const doAno = relatorio.vendas;
+    if (doAno.length && doAno.every(v => v.origem === 'leilaoFracao')) {
+      html += `<div class="alerta alerta-aviso">Estes meses vêm só de leilões de frações: quando uma bonificação ou incorporação deixa fração de ação ou cota, a empresa vende a fração e deposita o valor. Não foi venda sua, mas a Receita trata como alienação, então entra na ficha.</div>`;
+    }
     if (comuns.length) html += `<div class="cartao"><h3>Operações comuns · Mercado à vista (ações)</h3>${tabelaMeses(comuns, 'Acoes')}</div>`;
     if (fii.length) html += `<div class="cartao"><h3>Fundos de Investimento Imobiliário</h3>${tabelaMeses(fii, 'Fii')}</div>`;
     return html;
@@ -422,7 +459,7 @@
 
     const semAlteracao = b.semAlteracao.length
       ? `<details class="sem-alteracao"><summary>${b.semAlteracao.length} ${b.semAlteracao.length === 1 ? 'bem continua igual' : 'bens continuam iguais'}, nada a fazer</summary><ul>${b.semAlteracao
-          .map(x => `<li>${esc(x.ticker)}: ${qtd(x.quantidadeFinal)} ${x.tipo === 'fii' ? 'cotas' : 'ações'}, ${moeda(x.valorAtual)}</li>`)
+          .map(x => `<li>${esc(x.ticker)}: ${qtd(x.quantidadeFinal)} ${x.tipo === 'acao' ? 'ações' : 'cotas'}, ${moeda(x.valorAtual)}</li>`)
           .join('')}</ul></details>`
       : '';
 
@@ -467,12 +504,249 @@
     `;
   }
 
+  const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const hoje = () => new Date().toISOString().slice(0, 10);
+  const corCss = nome => getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+  const pct = v => `${(v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+  const compacto = v => {
+    const a = Math.abs(v);
+    if (a >= 1e6) return `R$ ${(v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`;
+    if (a >= 1e3) return `R$ ${(v / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil`;
+    return `R$ ${v.toLocaleString('pt-BR', { maximumFractionDigits: a < 10 ? 1 : 0 })}`;
+  };
+  const delta = (v, extra = '') => {
+    if (v == null) return '<span class="muted">sem cotação</span>';
+    const pos = v >= 0;
+    return `<span class="delta ${pos ? 'pos' : 'neg'}">${pos ? '▲' : '▼'} ${moeda(Math.abs(v))}${extra}</span>`;
+  };
+  const deltaPct = (v, texto) => {
+    const pos = v >= 0;
+    return `<span class="delta ${pos ? 'pos' : 'neg'}">${pos ? '▲' : '▼'} ${pct(Math.abs(v))} ${texto}</span>`;
+  };
+  let filtroPeriodo = '12m';
+
+  function serieDoPeriodo(serie) {
+    if (filtroPeriodo === 'tudo') return serie;
+    if (filtroPeriodo === '12m') return serie.slice(-12);
+    return serie.filter(s => s.mes.startsWith(filtroPeriodo));
+  }
+
+  function rotuloEixoMes(serie) {
+    const curto = serie.length <= 14;
+    return (mes, i) => {
+      const [a, m] = mes.split('-');
+      if (curto) return i === 0 || m === '01' ? `${MESES_CURTOS[Number(m) - 1]}/${a.slice(2)}` : MESES_CURTOS[Number(m) - 1];
+      return m === '01' || i === 0 ? a : '';
+    };
+  }
+
+  function tabelaSerie(serie, colunas) {
+    const linhas = [...serie].reverse().map(s => `<tr><td>${mesExtenso(s.mes)}</td>${colunas.map(c => `<td class="num-col">${moeda(c.valor(s))}</td>`).join('')}</tr>`);
+    return `<details class="ver-tabela"><summary>Ver dados em tabela</summary>${tabela([{ t: 'Mês' }, ...colunas.map(c => ({ t: c.t, num: 1 }))], linhas)}</details>`;
+  }
+
+  function renderDesempenho() {
+    const el = $('#desempenho');
+    if (!estado.movimentos.length && !estado.posicaoInicial.length) {
+      el.innerHTML = `<div class="cartao">${blocoVazio('Nada para mostrar ainda', 'Importe seu histórico da B3 ou clique em "Carregar exemplo".')}</div>`;
+      return;
+    }
+    const d = Desempenho.calcular(estado, regras, hoje());
+    const t = d.totais;
+    const emCarteira = d.ativos.filter(a => a.quantidade > 0);
+    const semCorretagem = estado.movimentos.some(m => String(m.id).startsWith('b3-'));
+    if (filtroPeriodo !== 'tudo' && filtroPeriodo !== '12m' && !d.anos.includes(Number(filtroPeriodo))) filtroPeriodo = '12m';
+    const serie = serieDoPeriodo(d.serie);
+    const somaSerie = f => serie.reduce((s, x) => s + f(x), 0);
+    const totalProventosPeriodo = somaSerie(s => s.proventos.dividendo + s.proventos.jcp + s.proventos.rendimento);
+    const totalAportesPeriodo = somaSerie(s => s.aportes);
+    const rotuloPeriodo = filtroPeriodo === 'tudo' ? 'desde o início' : filtroPeriodo === '12m' ? 'nos últimos 12 meses' : `em ${filtroPeriodo}`;
+    const todosSemCotacao = d.semCotacao.length === emCarteira.length;
+
+    const linhasAtivos = d.ativos.map(a => `<tr>
+        <td><strong>${esc(a.ticker)}</strong><div class="muted">${esc(regras.bens[a.tipo] ? regras.bens[a.tipo].rotulo : a.tipo)}</div></td>
+        <td class="num-col">${qtd(a.quantidade)}</td>
+        <td class="num-col">${a.quantidade ? moeda(a.precoMedio) : '<span class="muted">-</span>'}</td>
+        <td class="num-col">${a.quantidade ? `<input class="input-cotacao${a.preco == null ? ' vazio' : ''}" type="number" min="0" step="0.01" inputmode="decimal" data-cotacao="${esc(a.ticker)}" value="${a.preco ?? ''}" placeholder="0,00" aria-label="Cotação de ${esc(a.ticker)}">` : '<span class="muted">vendido</span>'}</td>
+        <td class="num-col">${moeda(a.custo)}</td>
+        <td class="num-col">${a.valorAtual != null ? moeda(a.valorAtual) : '<span class="muted">-</span>'}</td>
+        <td class="num-col">${a.quantidade ? delta(a.naoRealizado, a.naoRealizadoPct != null ? ` (${pct(Math.abs(a.naoRealizadoPct))})` : '') : '<span class="muted">-</span>'}</td>
+        <td class="num-col">${moeda(a.proventos)}</td>
+        <td class="num-col">${a.realizado ? moeda(a.realizado) : '<span class="muted">-</span>'}</td>
+        <td class="num-col"><strong>${moeda(a.resultado)}</strong></td>
+      </tr>`);
+
+    el.innerHTML = `
+      <div class="cartao hero">
+        <span class="rotulo">Patrimônio em ${dataBr(d.hoje)}${d.semCotacao.length ? (todosSemCotacao ? ' (pelo custo, sem cotações)' : ' (parte pelo custo)') : ''}</span>
+        <strong class="hero-valor">${moeda(t.patrimonio)}</strong>
+        <p class="sub">Custo de ${moeda(t.custo)} · valorização ${todosSemCotacao ? delta(null) : delta(t.naoRealizado, ` (${pct(Math.abs(t.naoRealizadoPct))})`)}</p>
+      </div>
+
+      <div class="resumo">
+        <div class="resumo-card" style="--cor: var(--serie-1)"><strong>${moeda(t.aportado)}</strong><span>Total aportado</span></div>
+        <div class="resumo-card" style="--cor: var(--serie-3)"><strong>${moeda(t.proventos)}</strong><span>Proventos recebidos</span></div>
+        <div class="resumo-card" style="--cor: var(--serie-2)"><strong>${moeda(t.realizado)}</strong><span>${d.somenteLeiloes ? 'Leilões de frações' : 'Resultado das vendas'}</span></div>
+        <div class="resumo-card" style="--cor: var(--pri)"><strong>${moeda(t.resultado)}</strong><span>Resultado total</span>${deltaPct(t.resultadoPct, 'sobre o aportado')}</div>
+      </div>
+
+      ${d.semCotacao.length ? `<div class="alerta alerta-aviso">Sem cotação para ${d.semCotacao.join(', ')}. Esses ativos entram no patrimônio pelo custo e sem valorização. Preencha a cotação na tabela do fim da página ou importe o arquivo de Posição da B3.</div>` : ''}
+
+      <div class="grid-2">
+        <div class="cartao cartao-grafico">
+          <h3>Resultado por ativo</h3>
+          <p class="nota">Valorização + proventos${d.somenteLeiloes ? ' + leilões de frações' : ' + vendas'}, desde a primeira compra.</p>
+          <div id="g-resultado"></div>
+        </div>
+        <div class="cartao cartao-grafico">
+          <h3>Composição da carteira</h3>
+          <p class="nota">Pelo valor de mercado${d.semCotacao.length ? ' (ou pelo custo, quando falta cotação)' : ''}.</p>
+          <div id="g-composicao"></div>
+        </div>
+      </div>
+
+      <div class="filtros">
+        <label>Período dos gráficos mensais
+          <select id="filtro-periodo">
+            <option value="12m">Últimos 12 meses</option>
+            <option value="tudo">Desde o início</option>
+            ${[...d.anos].reverse().map(a => `<option value="${a}">${a}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+
+      <div class="cartao cartao-grafico">
+        <h3>Proventos por mês</h3>
+        <p class="nota">${moeda(totalProventosPeriodo)} ${rotuloPeriodo}.</p>
+        <div class="legenda">
+          <span><i style="background: var(--serie-1)"></i>Dividendos</span>
+          <span><i style="background: var(--serie-2)"></i>JCP (líquido)</span>
+          <span><i style="background: var(--serie-3)"></i>Rendimentos de FII e Fiagro</span>
+        </div>
+        <div id="g-proventos"></div>
+        ${tabelaSerie(serie, [
+          { t: 'Dividendos', valor: s => s.proventos.dividendo },
+          { t: 'JCP', valor: s => s.proventos.jcp },
+          { t: 'Rendimentos', valor: s => s.proventos.rendimento }
+        ])}
+      </div>
+
+      <div class="grid-2">
+        <div class="cartao cartao-grafico">
+          <h3>Aportes por mês</h3>
+          <p class="nota">${moeda(totalAportesPeriodo)} ${rotuloPeriodo}.</p>
+          <div id="g-aportes"></div>
+          ${tabelaSerie(serie, [{ t: 'Aportes', valor: s => s.aportes }])}
+        </div>
+        <div class="cartao cartao-grafico">
+          <h3>Custo investido</h3>
+          <p class="nota">Quanto do seu dinheiro estava aplicado no fim de cada mês.</p>
+          <div id="g-custo"></div>
+          ${tabelaSerie(serie, [{ t: 'Custo', valor: s => s.custo }])}
+        </div>
+      </div>
+
+      <div class="cartao">
+        <h3>Desempenho por ativo</h3>
+        <p class="nota">Digite a cotação atual para ver a valorização. Ela fica salva neste navegador.${semCorretagem ? ' O preço médio vem do extrato da B3, que não traz corretagem e emolumentos.' : ''}</p>
+        ${tabela(
+          [
+            { t: 'Ativo' },
+            { t: 'Qtd', num: 1 },
+            { t: 'Preço médio', num: 1 },
+            { t: 'Cotação', num: 1 },
+            { t: 'Custo', num: 1 },
+            { t: 'Valor atual', num: 1 },
+            { t: 'Valorização', num: 1 },
+            { t: 'Proventos', num: 1 },
+            { t: d.somenteLeiloes ? 'Frações' : 'Vendas', num: 1 },
+            { t: 'Resultado', num: 1 }
+          ],
+          linhasAtivos
+        )}
+      </div>
+    `;
+
+    $('#filtro-periodo').value = filtroPeriodo;
+    desenharGraficos(d, serie);
+  }
+
+  function desenharGraficos(d, serie) {
+    const emCarteira = d.ativos.filter(a => a.quantidade > 0);
+    const patrimonio = d.totais.patrimonio || 1;
+    Graficos.barrasH($('#g-resultado'), {
+      titulo: 'Resultado por ativo',
+      formato: moeda,
+      corPositiva: corCss('--ganho'),
+      corNegativa: corCss('--perda'),
+      itens: [...d.ativos]
+        .sort((a, b) => b.resultado - a.resultado)
+        .map(a => ({
+          rotulo: a.ticker,
+          valor: a.resultado,
+          detalhe: [
+            { valor: a.naoRealizado != null ? moeda(a.naoRealizado) : a.quantidade ? 'sem cotação' : moeda(0), nome: 'valorização' },
+            { valor: moeda(a.proventos), nome: 'proventos' },
+            { valor: moeda(a.realizado), nome: d.somenteLeiloes ? 'leilão de frações' : 'vendas' },
+            { valor: moeda(a.resultado), nome: 'total' }
+          ]
+        }))
+    });
+    Graficos.barrasH($('#g-composicao'), {
+      titulo: 'Composição da carteira',
+      formato: moeda,
+      corPositiva: corCss('--serie-1'),
+      itens: emCarteira
+        .map(a => ({ a, v: a.valorAtual != null ? a.valorAtual : a.custo }))
+        .sort((x, y) => y.v - x.v)
+        .map(({ a, v }) => ({
+          rotulo: a.ticker,
+          valor: v,
+          rotuloValor: pct(v / patrimonio),
+          detalhe: [
+            { valor: moeda(v), nome: a.valorAtual != null ? 'valor atual' : 'custo' },
+            { valor: pct(v / patrimonio), nome: 'da carteira' }
+          ]
+        }))
+    });
+    if (!serie.length) return;
+    const comum = {
+      categorias: serie.map(s => s.mes),
+      formato: moeda,
+      formatoEixo: compacto,
+      rotuloCategoria: mesExtenso,
+      rotuloEixoX: rotuloEixoMes(serie)
+    };
+    Graficos.colunas($('#g-proventos'), {
+      ...comum,
+      titulo: 'Proventos por mês',
+      series: [
+        { nome: 'dividendos', cor: corCss('--serie-1'), valores: serie.map(s => s.proventos.dividendo) },
+        { nome: 'JCP', cor: corCss('--serie-2'), valores: serie.map(s => s.proventos.jcp) },
+        { nome: 'rendimentos', cor: corCss('--serie-3'), valores: serie.map(s => s.proventos.rendimento) }
+      ]
+    });
+    if (serie.some(s => s.aportes > 0)) {
+      Graficos.colunas($('#g-aportes'), {
+        ...comum,
+        titulo: 'Aportes por mês',
+        series: [{ nome: 'aportes', cor: corCss('--serie-1'), valores: serie.map(s => s.aportes) }]
+      });
+    } else {
+      $('#g-aportes').innerHTML = blocoVazio('Nenhum aporte neste período', 'Troque o período para "Desde o início" para ver todas as compras.');
+    }
+    Graficos.linha($('#g-custo'), { ...comum, titulo: 'Custo investido', cor: corCss('--serie-1'), valores: serie.map(s => s.custo) });
+  }
+
+  const abaAtiva = () => ($('.aba.ativa') || {}).dataset?.aba;
+
   function render() {
-    relatorio = Calculo.gerarRelatorio(estado, regras);
+    relatorio = Calculo.gerarRelatorio(estado, regras, Regras.paraAno);
     renderDeclaracao();
     renderMovimentos();
     renderCarteira();
     renderRelatorio();
+    if (abaAtiva() === 'desempenho') renderDesempenho();
   }
 
   function preencherCadastro(form, prefixo, ticker) {
@@ -562,9 +836,16 @@
     });
 
     const fm = $('#form-mov');
-    fm.data.min = `${ANO}-01-01`;
     fm.data.max = `${ANO}-12-31`;
     fm.tipo.addEventListener('change', ajustarFormMov);
+    $('#filtro-mov-ano').addEventListener('change', e => {
+      filtroMov.ano = e.target.value;
+      renderMovimentos();
+    });
+    $('#filtro-mov-grupo').addEventListener('change', e => {
+      filtroMov.grupo = e.target.value;
+      renderMovimentos();
+    });
     fm.ticker.addEventListener('input', () => {
       fm.ticker.value = fm.ticker.value.toUpperCase();
       ajustarNovoAtivo();
@@ -639,6 +920,31 @@
     });
 
     $('#btn-imprimir').addEventListener('click', () => window.print());
+
+    const painelDesempenho = $('#desempenho');
+    painelDesempenho.addEventListener('change', e => {
+      if (e.target.id === 'filtro-periodo') {
+        filtroPeriodo = e.target.value;
+        renderDesempenho();
+        return;
+      }
+      const ticker = e.target.dataset.cotacao;
+      if (!ticker) return;
+      const preco = Number(e.target.value);
+      estado.cotacoes = estado.cotacoes || {};
+      if (preco > 0) estado.cotacoes[ticker] = { preco, data: hoje() };
+      else delete estado.cotacoes[ticker];
+      salvar();
+      renderDesempenho();
+      const proximo = $$('.input-cotacao').find(i => i.dataset.cotacao > ticker);
+      if (proximo) proximo.focus();
+    });
+
+    let espera;
+    window.addEventListener('resize', () => {
+      clearTimeout(espera);
+      espera = setTimeout(() => abaAtiva() === 'desempenho' && renderDesempenho(), 150);
+    });
   }
 
   function iniciar() {

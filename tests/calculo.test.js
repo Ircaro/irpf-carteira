@@ -174,7 +174,7 @@ describe('eventos e proventos', () => {
     const r = Calculo.gerarRelatorio(Exemplo.gerar(), regras);
     const porCodigo = Object.fromEntries(r.rendimentos.isentos.map(g => [g.codigo, g]));
     assert.deepEqual(porCodigo['09'].itens.map(i => [i.ticker, i.valor]), [['ITSA4', 105.3], ['PETR4', 310]]);
-    assert.deepEqual(porCodigo['99'].itens.map(i => [i.ticker, i.valor]), [['KNRI11', 16], ['MXRF11', 400]]);
+    assert.deepEqual(porCodigo['26'].itens.map(i => [i.ticker, i.valor]), [['KNRI11', 16], ['MXRF11', 400]]);
     assert.equal(porCodigo['20'].total, 278.3);
     assert.equal(r.rendimentos.exclusivos[0].codigo, '10');
     assert.equal(r.rendimentos.exclusivos[0].total, 120);
@@ -190,13 +190,22 @@ describe('validações', () => {
     assert.ok(r.alertas.some(a => a.nivel === 'erro' && a.texto.includes('maior que a posição')));
   });
 
-  test('lançamento fora do ano-calendário é ignorado com alerta', () => {
+  test('lançamento posterior ao ano-calendário fica fora do relatório com alerta', () => {
     const e = estadoCom([{ ticker: 'PETR4', quantidade: 100, custo: 3000 }], [
-      { data: '2025-12-30', tipo: 'compra', ticker: 'PETR4', quantidade: 10, preco: 35 }
+      { data: '2027-01-05', tipo: 'compra', ticker: 'PETR4', quantidade: 10, preco: 35 }
     ]);
     const r = Calculo.gerarRelatorio(e, regras);
     assert.equal(bem(r, 'PETR4').status, 'semAlteracao');
-    assert.ok(r.alertas.some(a => a.texto.includes('fora de 2026')));
+    assert.ok(r.alertas.some(a => a.texto.includes('posterior a 2026')));
+  });
+
+  test('compra e venda do mesmo ativo no mesmo dia gera alerta de possível day trade', () => {
+    const e = estadoCom([{ ticker: 'PETR4', quantidade: 100, custo: 3000 }], [
+      { data: '2026-05-02', tipo: 'compra', ticker: 'PETR4', quantidade: 10, preco: 35 },
+      { data: '2026-05-02', tipo: 'venda', ticker: 'PETR4', quantidade: 10, preco: 36 }
+    ]);
+    const r = Calculo.gerarRelatorio(e, regras);
+    assert.ok(r.alertas.some(a => a.texto.includes('day trade')));
   });
 
   test('ativo sem CNPJ gera alerta', () => {
