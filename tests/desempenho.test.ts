@@ -1,10 +1,11 @@
-const { test, describe } = require('node:test');
-const assert = require('node:assert/strict');
-const Regras = require('../js/regras');
-const Desempenho = require('../js/desempenho');
+import { describe, test } from 'vitest';
+import assert from 'node:assert/strict';
+import * as Regras from '../src/dominio/regras';
+import * as Desempenho from '../src/dominio/desempenho';
+import type { EntradaCalculo } from '../src/dominio/tipos';
 
 const regras = Regras.porAno(2026);
-const estado = {
+const estado: EntradaCalculo = {
   cadastro: {
     PETR4: { tipo: 'acao' },
     BBAS3: { tipo: 'acao' },
@@ -27,7 +28,11 @@ const estado = {
 
 describe('desempenho da carteira', () => {
   const d = Desempenho.calcular(estado, regras, '2026-10-17');
-  const ativo = t => d.ativos.find(a => a.ticker === t);
+  const ativo = (t: string) => {
+    const a = d.ativos.find(x => x.ticker === t);
+    if (!a) throw new Error(`ativo ${t} ausente`);
+    return a;
+  };
 
   test('resultado não realizado usa a cotação informada', () => {
     assert.equal(ativo('PETR4').valorAtual, 4000);
@@ -59,7 +64,11 @@ describe('desempenho da carteira', () => {
     assert.equal(d.serie[0].mes, '2025-01');
     assert.equal(d.serie[d.serie.length - 1].mes, '2026-10');
     assert.equal(d.serie.length, 22);
-    const mes = m => d.serie.find(s => s.mes === m);
+    const mes = (m: string) => {
+      const s = d.serie.find(x => x.mes === m);
+      if (!s) throw new Error(`mês ${m} ausente`);
+      return s;
+    };
     assert.equal(mes('2025-03').custo, 5000);
     assert.equal(mes('2025-06').custo, 5000);
     assert.equal(mes('2025-08').custo, 3000);

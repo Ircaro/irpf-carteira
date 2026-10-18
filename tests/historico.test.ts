@@ -1,18 +1,19 @@
-const { test, describe } = require('node:test');
-const assert = require('node:assert/strict');
-const Regras = require('../js/regras');
-const Calculo = require('../js/calculo');
+import { describe, test } from 'vitest';
+import assert from 'node:assert/strict';
+import * as Regras from '../src/dominio/regras';
+import * as Calculo from '../src/dominio/calculo';
+import type { Cadastro, Movimento, PosicaoInicial } from '../src/dominio/tipos';
 
 const regras = Regras.porAno(2026);
-const cadastro = {
+const cadastro: Record<string, Cadastro> = {
   PETR4: { tipo: 'acao', nome: 'Petrobras', cnpj: '33.000.167/0001-01' },
   VALE3: { tipo: 'acao', nome: 'Vale', cnpj: '33.592.510/0001-54' },
   BBAS3: { tipo: 'acao', nome: 'Banco do Brasil', cnpj: '00.000.000/0001-91' },
   MXRF11: { tipo: 'fii', nome: 'Maxi Renda', cnpj: '97.521.225/0001-25' }
 };
-const historico = movimentos => ({ cadastro, posicaoInicial: [], movimentos });
-const relatorio = movimentos => Calculo.gerarRelatorio(historico(movimentos), regras, Regras.paraAno);
-const bem = (r, ticker) =>
+const historico = (movimentos: Movimento[]) => ({ cadastro, posicaoInicial: [] as PosicaoInicial[], movimentos });
+const relatorio = (movimentos: Movimento[]) => Calculo.gerarRelatorio(historico(movimentos), regras, Regras.paraAno);
+const bem = (r: Calculo.Relatorio, ticker: string) =>
   Object.values(r.bens)
     .flat()
     .find(b => b.ticker === ticker);
@@ -119,7 +120,7 @@ describe('histórico de vários anos', () => {
 });
 
 describe('conversão de fundos e Fiagro', () => {
-  const comCadastro = (movimentos, extra) =>
+  const comCadastro = (movimentos: Movimento[], extra: Record<string, Cadastro> = {}) =>
     Calculo.gerarRelatorio(
       {
         cadastro: {
@@ -171,7 +172,7 @@ describe('conversão de fundos e Fiagro', () => {
 });
 
 describe('valor declarado no ano anterior', () => {
-  const movimentos = [
+  const movimentos: Movimento[] = [
     { data: '2024-01-10', tipo: 'compra', ticker: 'PETR4', quantidade: 100, preco: 30 },
     { data: '2025-12-20', tipo: 'bonificacao', ticker: 'PETR4', quantidade: 0.5, preco: 10 },
     { data: '2026-02-10', tipo: 'venda', ticker: 'PETR4', quantidade: 0.5, preco: 12 }

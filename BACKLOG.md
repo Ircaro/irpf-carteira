@@ -45,7 +45,7 @@ Hoje os dados ficam no `localStorage` de cada navegador. Trocar de navegador, de
 
 - [ ] Feriados nacionais no cálculo do vencimento do DARF.
 - [ ] IRRF de 0,005% ("dedo-duro") abatendo do imposto devido.
-- [ ] Regras por ano-calendário para 2027 em diante em `js/regras.js`.
+- [ ] Regras por ano-calendário para 2027 em diante em `src/dominio/regras.ts`.
 - [ ] Confirmar no programa do IRPF os códigos usados (rendimento de FII/Fiagro no código 26 e Fiagro em Bens e Direitos 07.02: as fontes divergem).
 - [ ] Tratar a tributação de dividendos acima de R$ 50 mil por mês por empresa, além do alerta atual.
 
@@ -56,7 +56,7 @@ Hoje os dados ficam no `localStorage` de cada navegador. Trocar de navegador, de
 - [ ] Exportar o relatório final em PDF com layout próprio.
 - [ ] Busca automática de nome e CNPJ do ativo (dados abertos da CVM).
 - [x] Aba de desempenho com cotação digitada à mão.
-- [ ] Buscar cotações automaticamente (precisa de uma API com CORS liberado).
+- [ ] Buscar cotações automaticamente com chave da brapi.dev (ou outra API) informada pelo usuário e guardada só no navegador; confirmar se a API aceita chamada direto do navegador (CORS).
 - [ ] Gráfico do valor de mercado ao longo do tempo (precisa de cotações históricas, ex.: COTAHIST da B3).
 - [ ] Permitir sobrescrever o valor declarado em 31/12 quando ele divergir do calculado.
 - [ ] Versão instalável no celular (PWA).

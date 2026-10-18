@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "strictNullChecks": false,
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["tests"]
+}

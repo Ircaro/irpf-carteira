@@ -6,14 +6,15 @@ Se um bem tinha R$ 1.000,00 e passou a R$ 2.000,00, o relatório mostra o bem, o
 
 ## Como rodar
 
-Requer Node.js 20 ou superior. Não há dependências para instalar.
+Requer Node.js 22.12 ou superior. O projeto é em TypeScript, montado com Vite e testado com Vitest.
 
 ```bash
-npm start      # abre em http://localhost:5173
-npm test       # roda os testes do motor de cálculo
+npm install         # uma vez, baixa as ferramentas
+npm run dev         # abre em http://localhost:5173
+npm test            # roda os testes
+npm run typecheck   # confere os tipos
+npm run build       # gera o site em dist/
 ```
-
-Também funciona abrindo o `index.html` direto no navegador.
 
 Na primeira vez, clique em **Carregar exemplo** para ver o relatório final com dados fictícios.
 
@@ -30,7 +31,7 @@ Na primeira vez, clique em **Carregar exemplo** para ver o relatório final com 
 Baixe na Área do Investidor da B3 o **extrato de movimentação** de cada ano (Excel) e, se quiser cotações e conferência de quantidades, o arquivo de **posição**. Coloque tudo numa pasta **fora do repositório** e rode:
 
 ```bash
-node scripts/importar-b3.js "C:/caminho/da/pasta"
+npm run importar -- "C:/caminho/da/pasta"
 ```
 
 O script gera `carteira-irpf-importada.json` na mesma pasta. No site, use **Importar backup** com esse arquivo.
@@ -81,23 +82,31 @@ O script lista as pendências que faltam preencher.
 - DARF abaixo de R$ 10 acumula para o próximo mês com imposto.
 - Alertas de venda maior que a posição, CNPJ faltando, fração em grupamento e dividendos acima de R$ 50 mil no mês por empresa.
 
-Os códigos das fichas e as alíquotas ficam por ano-calendário em [`js/regras.js`](js/regras.js). Para um ano novo, basta adicionar outra entrada.
+Os códigos das fichas e as alíquotas ficam por ano-calendário em [`src/dominio/regras.ts`](src/dominio/regras.ts). Para um ano novo, basta adicionar outra entrada.
 
 ## Estrutura
 
 ```
-index.html          interface
-css/styles.css      estilos (tema escuro Noite, fonte Outfit)
-js/regras.js        regras e códigos por ano-calendário
-js/calculo.js       motor de cálculo, sem dependência de DOM
-js/desempenho.js    resultado por ativo e séries mensais
-js/importador-b3.js leitura dos extratos da B3
-js/graficos.js      gráficos em SVG, sem biblioteca
-js/exemplo.js       massa de exemplo
-js/app.js           estado, persistência e renderização
-tests/              testes (node:test)
-scripts/            servidor local, importador e leitor de .xlsx
+index.html                       página
+src/dominio/tipos.ts             tipos de dados (lançamentos, cadastro, regras)
+src/dominio/regras.ts            regras e códigos por ano-calendário
+src/dominio/calculo.ts           motor de cálculo, sem dependência de tela
+src/dominio/desempenho.ts        resultado por ativo e séries mensais
+src/importacao/importador-b3.ts  leitura dos extratos da B3
+src/ui/app.ts                    estado, persistência e renderização
+src/ui/graficos.ts               gráficos em SVG, sem biblioteca
+src/ui/estilos.css               tema escuro Noite, fonte Outfit
+src/exemplo.ts                   massa de exemplo
+scripts/importar-b3.ts           importador por linha de comando (Node)
+scripts/lib/xlsx.ts              leitor de .xlsx sem dependências
+tests/                           testes (Vitest)
 ```
+
+## Publicação
+
+O GitHub Actions ([`.github/workflows/site.yml`](.github/workflows/site.yml)) roda os testes e o build em todo push. Em push na `main`, ele também publica o site no GitHub Pages.
+
+Para isso funcionar, em **Settings → Pages → Build and deployment → Source**, escolha **GitHub Actions** (e não "Deploy from a branch").
 
 Os dados ficam só no `localStorage` do navegador. O backup é um JSON exportado e importado pela própria tela.
 

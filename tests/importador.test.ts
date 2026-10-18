@@ -1,17 +1,20 @@
-const { test, describe } = require('node:test');
-const assert = require('node:assert/strict');
-const zlib = require('node:zlib');
-const Regras = require('../js/regras');
-const Calculo = require('../js/calculo');
-const Importador = require('../js/importador-b3');
-const { lerXlsx } = require('../scripts/lib/xlsx');
+import { describe, test } from 'vitest';
+import assert from 'node:assert/strict';
+import { deflateRawSync } from 'node:zlib';
+import * as Regras from '../src/dominio/regras';
+import * as Importador from '../src/importacao/importador-b3';
+import type { Ajustes, ArquivoPlanilha, Celula } from '../src/importacao/importador-b3';
+import type { Movimento } from '../src/dominio/tipos';
+
+type MovimentoSolto = Movimento & { quantidade?: number; preco?: number; valor?: number };
+import { lerXlsx } from '../scripts/lib/xlsx';
 
 const CABECALHO = ['Entrada/Saída', 'Data', 'Movimentação', 'Produto', 'Instituição', 'Quantidade', 'Preço unitário', 'Valor da Operação'];
 const XP = 'XP INVESTIMENTOS CCTVM S/A';
 const NU = 'NU INVEST CORRETORA DE VALORES S.A.';
-const arquivo = (nome, linhas) => ({ nome, data: '2026-10-17', abas: [{ nome: 'Movimentação', linhas: [CABECALHO, ...linhas] }] });
+const arquivo = (nome: string, linhas: Celula[][]): ArquivoPlanilha => ({ nome, data: '2026-10-17', abas: [{ nome: 'Movimentação', linhas: [CABECALHO, ...linhas] }] });
 
-const linhas2025 = [
+const linhas2025: Celula[][] = [
   ['Credito', '10/01/2025', 'Transferência - Liquidação', 'PETR4 - PETROLEO BRASILEIRO S.A. PETROBRAS', XP, 10, 30, 300],
   ['Credito', '12/01/2025', 'Transferência - Liquidação', 'MXRF11 - MAXI RENDA FDO INV IMOB - FII', NU, 100, 10, 1000],
   ['Credito', '15/01/2025', 'Transferência - Liquidação', 'SNAG11 - SUNO AGRO - FIAGRO-IMOBILIARIO', NU, 50, 10, 500],
@@ -28,7 +31,7 @@ const linhas2025 = [
   ['Debito', '22/12/2025', 'APLICAÇÃO', 'CDB - BANCO ITAU UNIBANCO S.A.', 'ITAU UNIBANCO S.A.', 1, 100, 100],
   ['Credito', '23/12/2025', 'Rendimento', 'MXRF11 - MAXI RENDA FDO INV IMOB - FII', 'ITAU UNIBANCO S.A.', 5, 0.1, 0.5]
 ];
-const linhas2026 = [
+const linhas2026: Celula[][] = [
   ['Debito', '10/01/2026', 'Fração em Ativos', 'PETR4 - PETROLEO BRASILEIRO S.A. PETROBRAS', XP, 0.5, '-', '-'],
   ['Credito', '05/02/2026', 'Leilão de Fração', 'PETR4 - PETROLEO BRASILEIRO S.A. PETROBRAS', XP, 0.5, 40, 20],
   ['Debito', '28/02/2026', 'Transferência', 'PETR4 - PETROLEO BRASILEIRO S.A. PETROBRAS', XP, 11, '-', '-'],
@@ -36,7 +39,7 @@ const linhas2026 = [
   ['Credito', '15/03/2026', 'Rendimento', 'MXRF11 - MAXI RENDA FDO INV IMOB - FII', NU, 120, 0.1, 12]
 ];
 
-const ajustes = {
+const ajustes: Ajustes = {
   ignorarInstituicoes: ['ITAU UNIBANCO'],
   precos: { 'MXRF11|2025-08-20': 10.28 },
   custoBonificacao: { 'PETR4|2025-12-22': 20 }
@@ -47,7 +50,7 @@ describe('importação do extrato de movimentação da B3', () => {
     [arquivo('mov-2025.xlsx', linhas2025), arquivo('mov-2026.xlsx', linhas2026), arquivo('mov-repetido.xlsx', linhas2026.slice(4))],
     { ajustes, anoCalendario: 2026 }
   );
-  const movs = (ticker, tipo) => estado.movimentos.filter(m => m.ticker === ticker && (!tipo || m.tipo === tipo));
+  const movs = (ticker: string, tipo?: string) => estado.movimentos.filter(m => m.ticker === ticker && (!tipo || m.tipo === tipo)) as MovimentoSolto[];
 
   test('liquidação vira compra com o preço do extrato', () => {
     assert.deepEqual(movs('PETR4', 'compra').map(m => [m.data, m.quantidade, m.preco]), [['2025-01-10', 10, 30]]);
@@ -97,7 +100,7 @@ describe('importação do extrato de movimentação da B3', () => {
   });
 
   test('quantidades informadas nos proventos batem com a posição calculada', () => {
-    const div = Importador.conferirQuantidades(estado, Regras.porAno(2026), Calculo, resumo.quantidadesInformadas);
+    const div = Importador.conferirQuantidades(estado, Regras.porAno(2026), resumo.quantidadesInformadas);
     assert.deepEqual(div, []);
   });
 
@@ -108,18 +111,18 @@ describe('importação do extrato de movimentação da B3', () => {
   });
 
   test('cabeçalho diferente do esperado gera erro listando as colunas encontradas', () => {
-    const ruim = { nome: 'x.xlsx', abas: [{ nome: 'A', linhas: [['Entrada/Saída', 'Data', 'Movimentação', 'Produto', 'Qtd']] }] };
+    const ruim: ArquivoPlanilha = { nome: 'x.xlsx', abas: [{ nome: 'A', linhas: [['Entrada/Saída', 'Data', 'Movimentação', 'Produto', 'Qtd']] }] };
     assert.throws(() => Importador.importar([ruim], {}), /Colunas no arquivo: Entrada\/Saída \| Data/);
   });
 });
 
-function montarXlsx(arquivos) {
-  const partes = [];
-  const central = [];
+function montarXlsx(arquivos: [string, string, boolean][]): Buffer {
+  const partes: Buffer[] = [];
+  const central: Buffer[] = [];
   let offset = 0;
   for (const [nome, conteudo, comprimir] of arquivos) {
     const bruto = Buffer.from(conteudo, 'utf8');
-    const dados = comprimir ? zlib.deflateRawSync(bruto) : bruto;
+    const dados = comprimir ? deflateRawSync(bruto) : bruto;
     const nomeBuf = Buffer.from(nome, 'utf8');
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);

@@ -1,14 +1,27 @@
 {
   "name": "irpf-carteira",
-  "version": "0.1.0",
-  "description": "Protótipo local-first que acompanha a carteira de ações e FIIs ao longo do ano e mostra o que atualizar na declaração do IRPF.",
+  "version": "0.2.0",
+  "description": "Site local-first que guarda o histórico de ações, FIIs e Fiagro, mostra o desempenho da carteira e o que atualizar na declaração do IRPF.",
   "private": true,
   "license": "UNLICENSED",
+  "type": "module",
   "scripts": {
-    "start": "node scripts/servidor.js",
-    "test": "node --test \"tests/**/*.test.js\""
+    "dev": "vite",
+    "start": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json && tsc -p tsconfig.tests.json",
+    "test": "vitest run",
+    "importar": "tsx scripts/importar-b3.ts"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
   }
 }

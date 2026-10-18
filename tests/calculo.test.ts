@@ -1,12 +1,18 @@
-const { test, describe } = require('node:test');
-const assert = require('node:assert/strict');
-const Regras = require('../js/regras');
-const Calculo = require('../js/calculo');
-const Exemplo = require('../js/exemplo');
+import { describe, test } from 'vitest';
+import assert from 'node:assert/strict';
+import * as Regras from '../src/dominio/regras';
+import * as Calculo from '../src/dominio/calculo';
+import { gerarExemplo } from '../src/exemplo';
+import type { Cadastro, EntradaCalculo, Movimento, PosicaoInicial, Prejuizo } from '../src/dominio/tipos';
 
 const regras = Regras.porAno(2026);
 
-const estadoCom = (posicaoInicial, movimentos, cadastro = {}, prejuizoInicial) => ({
+const estadoCom = (
+  posicaoInicial: PosicaoInicial[],
+  movimentos: Movimento[],
+  cadastro: Record<string, Cadastro> = {},
+  prejuizoInicial?: Prejuizo
+): EntradaCalculo => ({
   cadastro: {
     PETR4: { tipo: 'acao', nome: 'Petrobras', cnpj: '33.000.167/0001-01' },
     VALE3: { tipo: 'acao', nome: 'Vale', cnpj: '33.592.510/0001-54' },
@@ -18,13 +24,13 @@ const estadoCom = (posicaoInicial, movimentos, cadastro = {}, prejuizoInicial) =
   prejuizoInicial
 });
 
-const bem = (relatorio, ticker) =>
+const bem = (relatorio: Calculo.Relatorio, ticker: string) =>
   Object.values(relatorio.bens)
     .flat()
     .find(b => b.ticker === ticker);
 
 describe('comparação de bens com a declaração anterior', () => {
-  const r = Calculo.gerarRelatorio(Exemplo.gerar(), regras);
+  const r = Calculo.gerarRelatorio(gerarExemplo(), regras);
 
   test('bem com mesma quantidade e mesmo valor fica sem alteração', () => {
     assert.deepEqual(r.bens.semAlteracao.map(b => b.ticker), ['ITSA4', 'KNRI11']);
@@ -61,8 +67,8 @@ describe('comparação de bens com a declaração anterior', () => {
 });
 
 describe('apuração mensal', () => {
-  const r = Calculo.gerarRelatorio(Exemplo.gerar(), regras);
-  const mes = m => r.apuracao.meses.find(x => x.mes === m);
+  const r = Calculo.gerarRelatorio(gerarExemplo(), regras);
+  const mes = (m: string) => r.apuracao.meses.find(x => x.mes === m);
 
   test('venda de ações até R$ 20 mil no mês com lucro é isenta', () => {
     assert.equal(mes('2026-03').isento, true);
@@ -171,7 +177,7 @@ describe('eventos e proventos', () => {
   });
 
   test('proventos são agrupados por código e fonte pagadora', () => {
-    const r = Calculo.gerarRelatorio(Exemplo.gerar(), regras);
+    const r = Calculo.gerarRelatorio(gerarExemplo(), regras);
     const porCodigo = Object.fromEntries(r.rendimentos.isentos.map(g => [g.codigo, g]));
     assert.deepEqual(porCodigo['09'].itens.map(i => [i.ticker, i.valor]), [['ITSA4', 105.3], ['PETR4', 310]]);
     assert.deepEqual(porCodigo['26'].itens.map(i => [i.ticker, i.valor]), [['KNRI11', 16], ['MXRF11', 400]]);
